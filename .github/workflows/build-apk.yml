@@ -152,3 +152,4 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30
           if-no-files-found: warn
+          
