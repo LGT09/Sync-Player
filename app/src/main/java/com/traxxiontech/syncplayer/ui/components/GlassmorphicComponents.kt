@@ -41,8 +41,12 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -64,6 +68,165 @@ import com.traxxiontech.syncplayer.ui.theme.LocalGlassmorphicColors
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+
+@Composable
+fun AmbientLiquidBackground(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val glassColors = LocalGlassmorphicColors.current
+    val infiniteTransition = rememberInfiniteTransition(label = "liquid_orbs")
+
+    val orb1Offset by infiniteTransition.animateFloat(
+        initialValue = -80f,
+        targetValue = 120f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(8000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "orb1"
+    )
+
+    val orb2Offset by infiniteTransition.animateFloat(
+        initialValue = 100f,
+        targetValue = -90f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(10000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "orb2"
+    )
+
+    val orb3Scale by infiniteTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(6500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "orb3"
+    )
+
+    Box(modifier = modifier.fillMaxSize().background(Color(0xFF0B0D14))) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+
+            // Base atmospheric mesh gradient
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0F131D),
+                        Color(0xFF08090E)
+                    )
+                )
+            )
+
+            // Luminous liquid Orb 1 (Top Left cyan/glow)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        glassColors.glowColor.copy(alpha = 0.28f),
+                        glassColors.glowColor.copy(alpha = 0.08f),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.22f + orb1Offset, h * 0.18f + orb1Offset * 0.6f),
+                    radius = (w * 0.55f)
+                ),
+                radius = w * 0.55f,
+                center = Offset(w * 0.22f + orb1Offset, h * 0.18f + orb1Offset * 0.6f)
+            )
+
+            // Luminous liquid Orb 2 (Center Right purple/neon)
+            val secondaryGlow = Color(0xFF8A2BE2)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        secondaryGlow.copy(alpha = 0.22f),
+                        secondaryGlow.copy(alpha = 0.05f),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.85f + orb2Offset * 0.5f, h * 0.55f + orb2Offset),
+                    radius = (w * 0.6f)
+                ),
+                radius = w * 0.6f,
+                center = Offset(w * 0.85f + orb2Offset * 0.5f, h * 0.55f + orb2Offset)
+            )
+
+            // Luminous liquid Orb 3 (Bottom Left accent)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        glassColors.glowColor.copy(alpha = 0.18f),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.15f, h * 0.88f),
+                    radius = (w * 0.45f * orb3Scale)
+                ),
+                radius = w * 0.45f * orb3Scale,
+                center = Offset(w * 0.15f, h * 0.88f)
+            )
+        }
+
+        content()
+    }
+}
+
+@Composable
+fun LiquidGlassCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(22.dp),
+    borderAlpha: Float = 0.45f,
+    onClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    val glassColors = LocalGlassmorphicColors.current
+    val clickableModifier = if (onClick != null) {
+        modifier.clickable(onClick = onClick)
+    } else {
+        modifier
+    }
+
+    Surface(
+        modifier = clickableModifier
+            .clip(shape)
+            .border(
+                BorderStroke(
+                    1.2.dp,
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = borderAlpha),
+                            glassColors.glowColor.copy(alpha = borderAlpha * 0.5f),
+                            Color.White.copy(alpha = 0.06f)
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(400f, 400f)
+                    )
+                ),
+                shape = shape
+            ),
+        shape = shape,
+        color = Color(0xFF131722).copy(alpha = 0.65f),
+        tonalElevation = 6.dp,
+        shadowElevation = 12.dp
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.07f),
+                            Color(0xFF161A26).copy(alpha = 0.75f)
+                        ),
+                        center = Offset(50f, 0f),
+                        radius = 600f
+                    )
+                )
+        ) {
+            content()
+        }
+    }
+}
 
 @Composable
 fun FrostedGlassCard(
@@ -541,6 +704,87 @@ fun MiniPlayerBar(
                     contentDescription = "Next",
                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun GlassmorphicDialog(
+    onDismissRequest: () -> Unit,
+    properties: DialogProperties = DialogProperties(usePlatformDefaultWidth = false),
+    content: @Composable () -> Unit
+) {
+    val glassColors = LocalGlassmorphicColors.current
+
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = properties
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.60f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismissRequest
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            // Atmospheric blurred glow halo
+            Box(
+                modifier = Modifier
+                    .size(280.dp)
+                    .blur(glassColors.blurRadiusDp.dp)
+                    .background(glassColors.glowColor.copy(alpha = 0.18f), CircleShape)
+            )
+
+            // Glass container
+            Surface(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth(0.92f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    )
+                    .clip(RoundedCornerShape(24.dp))
+                    .border(
+                        BorderStroke(
+                            1.5.dp,
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    glassColors.borderSpecular,
+                                    glassColors.glowColor.copy(alpha = 0.35f),
+                                    Color.White.copy(alpha = 0.08f)
+                                ),
+                                start = Offset(0f, 0f),
+                                end = Offset(600f, 600f)
+                            )
+                        ),
+                        RoundedCornerShape(24.dp)
+                    ),
+                shape = RoundedCornerShape(24.dp),
+                color = glassColors.dialogSurface,
+                tonalElevation = 16.dp,
+                shadowElevation = 24.dp
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.06f),
+                                    Color(0xFF0F131D).copy(alpha = 0.88f)
+                                )
+                            )
+                        )
+                        .padding(24.dp)
+                ) {
+                    content()
+                }
             }
         }
     }

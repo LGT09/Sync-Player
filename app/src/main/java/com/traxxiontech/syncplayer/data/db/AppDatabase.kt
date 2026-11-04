@@ -6,13 +6,18 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [MediaItemEntity::class],
-    version = 1,
+    entities = [
+        MediaItemEntity::class,
+        PlaylistEntity::class,
+        PlaylistTrackCrossRef::class
+    ],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun mediaDao(): MediaDao
+    abstract fun playlistDao(): PlaylistDao
 
     companion object {
         @Volatile

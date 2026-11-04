@@ -72,6 +72,8 @@ fun HomeScreen(
     onVideoClick: (VideoItem) -> Unit,
     onPhotoClick: (PhotoItem) -> Unit,
     onNavigateToSection: (String) -> Unit,
+    currentSortOrder: com.traxxiontech.syncplayer.model.MediaSortOrder = com.traxxiontech.syncplayer.model.MediaSortOrder.LATEST,
+    onSortOrderChanged: (com.traxxiontech.syncplayer.model.MediaSortOrder) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val glassColors = LocalGlassmorphicColors.current
@@ -130,39 +132,49 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.width(14.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Welcome back,",
-                                fontSize = 11.sp,
-                                color = Color.White.copy(alpha = 0.65f)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(glassColors.glowColor.copy(alpha = 0.2f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
+                        if (userProfile.fullName.isNotBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = userProfile.favoriteTheme.displayName,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = glassColors.glowColor
+                                    text = "Welcome back,",
+                                    fontSize = 11.sp,
+                                    color = Color.White.copy(alpha = 0.65f)
                                 )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(glassColors.glowColor.copy(alpha = 0.2f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = userProfile.favoriteTheme.displayName,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = glassColors.glowColor
+                                    )
+                                }
                             }
+                            Text(
+                                text = userProfile.fullName,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Text(
+                                text = "Sync Player Media Hub",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
 
                         Text(
-                            text = userProfile.fullName.ifBlank { "Sync Member" },
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Text(
-                            text = "@${userProfile.username.ifBlank { "traxxion" }} • ${songs.size} songs • ${videos.size} videos",
+                            text = if (userProfile.username.isNotBlank()) "@${userProfile.username} • ${songs.size} songs • ${videos.size} videos" else "${songs.size} songs • ${videos.size} videos • Offline Player",
                             fontSize = 11.sp,
                             color = glassColors.glowColor,
                             maxLines = 1,
@@ -362,6 +374,41 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(18.dp))
             SectionHeader(title = "Device Songs", actionText = "Music Library") {
                 onNavigateToSection("music")
+            }
+
+            // Media Sorting Selector
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val sortOptions = listOf(
+                    com.traxxiontech.syncplayer.model.MediaSortOrder.LATEST to "Latest 🕒",
+                    com.traxxiontech.syncplayer.model.MediaSortOrder.ALPHABETICAL_AZ to "A - Z 🔤",
+                    com.traxxiontech.syncplayer.model.MediaSortOrder.ARTIST to "Artist 👤",
+                    com.traxxiontech.syncplayer.model.MediaSortOrder.DURATION to "Duration ⏱️"
+                )
+                items(sortOptions) { (order, label) ->
+                    val isSelected = currentSortOrder == order
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) glassColors.glowColor.copy(alpha = 0.25f) else glassColors.surfaceGlassSecondary)
+                            .border(
+                                1.dp,
+                                if (isSelected) glassColors.glowColor else glassColors.borderGlass.copy(alpha = 0.3f),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable { onSortOrderChanged(order) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) glassColors.glowColor else Color.White.copy(alpha = 0.75f)
+                        )
+                    }
+                }
             }
         }
 

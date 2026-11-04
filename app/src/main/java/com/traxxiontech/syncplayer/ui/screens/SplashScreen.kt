@@ -200,7 +200,7 @@ fun SplashScreen(
             Spacer(modifier = Modifier.height(36.dp))
 
             Text(
-                text = "Created by Vincent Ganiza a.k.a Traxxion Tech",
+                text = "Created by Traxxion Tech",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White.copy(alpha = 0.9f),

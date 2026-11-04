@@ -15,7 +15,11 @@ data class GlassmorphicColors(
     val skeuoHighlight: Color,
     val skeuoShadow: Color,
     val backgroundGradient: List<Color>,
-    val waveColor: Color
+    val waveColor: Color,
+    val dialogSurface: Color = Color(0xFF151A26).copy(alpha = 0.88f),
+    val cardSurface: Color = Color(0xFF131722).copy(alpha = 0.70f),
+    val borderSpecular: Color = Color.White.copy(alpha = 0.35f),
+    val blurRadiusDp: Float = 18f
 )
 
 val LocalGlassmorphicColors = staticCompositionLocalOf {
@@ -27,7 +31,11 @@ val LocalGlassmorphicColors = staticCompositionLocalOf {
         skeuoHighlight = Color(0x66FFFFFF),
         skeuoShadow = Color(0x99000000),
         backgroundGradient = listOf(Color(0xFF0D1117), Color(0xFF161B22), Color(0xFF090D16)),
-        waveColor = Color(0xFF00F5D4)
+        waveColor = Color(0xFF00F5D4),
+        dialogSurface = Color(0xFF151A26).copy(alpha = 0.88f),
+        cardSurface = Color(0xFF131722).copy(alpha = 0.70f),
+        borderSpecular = Color.White.copy(alpha = 0.35f),
+        blurRadiusDp = 18f
     )
 }
 

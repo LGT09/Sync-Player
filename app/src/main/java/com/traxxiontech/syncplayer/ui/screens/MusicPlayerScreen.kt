@@ -102,11 +102,27 @@ fun FullMusicPlayerScreen(
     val currentSong = playbackState.currentSong ?: return
     val glassColors = LocalGlassmorphicColors.current
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     var viewMode by remember { mutableStateOf(PlayerViewMode.SPLIT) }
     var showEqualizerDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showLyricsEditorDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
+
+    val lrcPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            try {
+                val content = context.contentResolver.openInputStream(it)?.bufferedReader()?.use { reader -> reader.readText() }
+                if (!content.isNullOrBlank()) {
+                    onSaveLyrics(currentSong.id, content)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     var bassLevel by remember { mutableFloatStateOf(playbackState.bassBoostStrength / 1000f) }
     var midLevel by remember { mutableFloatStateOf(0.5f) }
@@ -310,6 +326,8 @@ fun FullMusicPlayerScreen(
                                 activeIndex = activeIndex,
                                 onLineClick = { timestamp -> onSeekTo(timestamp) },
                                 listState = lyricsListState,
+                                onImportLrcClick = { lrcPickerLauncher.launch("*/*") },
+                                onPasteLyricsClick = { showLyricsEditorDialog = true },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight(1f)
@@ -342,6 +360,8 @@ fun FullMusicPlayerScreen(
                                 activeIndex = activeIndex,
                                 onLineClick = { timestamp -> onSeekTo(timestamp) },
                                 listState = lyricsListState,
+                                onImportLrcClick = { lrcPickerLauncher.launch("*/*") },
+                                onPasteLyricsClick = { showLyricsEditorDialog = true },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight(1f)
@@ -681,7 +701,9 @@ fun SyncedLyricsContainer(
     activeIndex: Int,
     onLineClick: (Long) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onImportLrcClick: () -> Unit = {},
+    onPasteLyricsClick: () -> Unit = {}
 ) {
     val glassColors = LocalGlassmorphicColors.current
 
@@ -690,12 +712,70 @@ fun SyncedLyricsContainer(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "No lyrics loaded.\nTap the quote icon above to paste or load an .lrc file.",
-                textAlign = TextAlign.Center,
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.5f)
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(glassColors.surfaceGlassSecondary.copy(alpha = 0.5f))
+                    .border(1.dp, glassColors.borderGlass.copy(alpha = 0.4f), RoundedCornerShape(22.dp))
+                    .padding(22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.FormatQuote,
+                    contentDescription = "Lyrics",
+                    tint = glassColors.glowColor,
+                    modifier = Modifier.size(36.dp)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "No Synchronized Lyrics (.lrc) Found",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Sync Player supports industry-standard .lrc files with timestamps.",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.65f),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(glassColors.glowColor.copy(alpha = 0.25f))
+                            .border(1.dp, glassColors.glowColor, RoundedCornerShape(12.dp))
+                            .clickable { onImportLrcClick() }
+                            .padding(horizontal = 14.dp, vertical = 9.dp)
+                    ) {
+                        Text(
+                            text = "Import .LRC 📂",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = glassColors.glowColor
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(glassColors.surfaceGlass)
+                            .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .clickable { onPasteLyricsClick() }
+                            .padding(horizontal = 14.dp, vertical = 9.dp)
+                    ) {
+                        Text(
+                            text = "Paste / Edit ✏️",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
         }
     } else {
         LazyColumn(

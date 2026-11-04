@@ -19,13 +19,19 @@ import com.traxxiontech.syncplayer.model.VideoItem
 import com.traxxiontech.syncplayer.data.db.AppDatabase
 import com.traxxiontech.syncplayer.data.db.MediaDao
 import com.traxxiontech.syncplayer.data.db.MediaItemEntity
+import com.traxxiontech.syncplayer.data.db.PlaylistDao
+import com.traxxiontech.syncplayer.data.db.PlaylistEntity
+import com.traxxiontech.syncplayer.data.db.PlaylistTrackCrossRef
 import com.traxxiontech.syncplayer.security.VaultCryptoService
 import com.traxxiontech.syncplayer.security.VaultLockType
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -39,10 +45,15 @@ class MediaRepository(private val context: Context) {
 
     val database: AppDatabase = AppDatabase.getInstance(context)
     val mediaDao: MediaDao = database.mediaDao()
+    val playlistDao: PlaylistDao = database.playlistDao()
     val vaultCrypto: VaultCryptoService = VaultCryptoService(context)
+    private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val _songs = MutableStateFlow<List<SongItem>>(emptyList())
     val songs: StateFlow<List<SongItem>> = _songs.asStateFlow()
+
+    private val _songSortOrder = MutableStateFlow(com.traxxiontech.syncplayer.model.MediaSortOrder.LATEST)
+    val songSortOrder: StateFlow<com.traxxiontech.syncplayer.model.MediaSortOrder> = _songSortOrder.asStateFlow()
 
     private val _videos = MutableStateFlow<List<VideoItem>>(emptyList())
     val videos: StateFlow<List<VideoItem>> = _videos.asStateFlow()
@@ -67,8 +78,32 @@ class MediaRepository(private val context: Context) {
 
     init {
         loadFavorites()
-        loadPlaylists()
+        observeRoomPlaylists()
         loadVaultItems()
+    }
+
+    fun hasCompletedFirstLaunch(): Boolean {
+        return prefs.getBoolean("has_completed_first_launch", false)
+    }
+
+    fun setFirstLaunchCompleted() {
+        prefs.edit().putBoolean("has_completed_first_launch", true).apply()
+        _userProfile.value = _userProfile.value.copy(hasCompletedFirstLaunch = true)
+    }
+
+    fun setSongSortOrder(order: com.traxxiontech.syncplayer.model.MediaSortOrder) {
+        _songSortOrder.value = order
+        _songs.value = sortSongsList(_songs.value, order)
+    }
+
+    private fun sortSongsList(list: List<SongItem>, order: com.traxxiontech.syncplayer.model.MediaSortOrder): List<SongItem> {
+        return when (order) {
+            com.traxxiontech.syncplayer.model.MediaSortOrder.LATEST -> list.sortedByDescending { it.dateAdded }
+            com.traxxiontech.syncplayer.model.MediaSortOrder.ALPHABETICAL_AZ -> list.sortedBy { it.title.lowercase() }
+            com.traxxiontech.syncplayer.model.MediaSortOrder.ALPHABETICAL_ZA -> list.sortedByDescending { it.title.lowercase() }
+            com.traxxiontech.syncplayer.model.MediaSortOrder.ARTIST -> list.sortedBy { it.artist.lowercase() }
+            com.traxxiontech.syncplayer.model.MediaSortOrder.DURATION -> list.sortedByDescending { it.durationMs }
+        }
     }
 
     suspend fun scanDeviceMedia() = withContext(Dispatchers.IO) {
@@ -158,7 +193,7 @@ class MediaRepository(private val context: Context) {
             MediaStore.Audio.Media.DATE_ADDED
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-        val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
+        val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
 
         try {
             val cursor = context.contentResolver.query(
@@ -217,7 +252,114 @@ class MediaRepository(private val context: Context) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        _songs.value = audioList
+
+        // If device has no media (e.g. fresh install or emulator), provide offline playable sample tracks
+        if (audioList.isEmpty()) {
+            val sampleUri = getOrCreateOfflineAudioUri()
+            val sampleFile = File(context.filesDir, "sync_player_offline_audio.wav")
+            audioList.add(
+                SongItem(
+                    id = -101L,
+                    title = "Acoustic Horizon",
+                    artist = "Traxxion Studio",
+                    album = "Liquid Waves",
+                    albumId = 0L,
+                    durationMs = 30000L,
+                    uri = sampleUri,
+                    path = sampleFile.absolutePath,
+                    sizeBytes = if (sampleFile.exists()) sampleFile.length() else 2646044L,
+                    dateAdded = System.currentTimeMillis() / 1000,
+                    isFavorite = false,
+                    hasLyrics = false
+                )
+            )
+            audioList.add(
+                SongItem(
+                    id = -102L,
+                    title = "Neon Resonance",
+                    artist = "Traxxion Studio",
+                    album = "Liquid Waves",
+                    albumId = 0L,
+                    durationMs = 30000L,
+                    uri = sampleUri,
+                    path = sampleFile.absolutePath,
+                    sizeBytes = if (sampleFile.exists()) sampleFile.length() else 2646044L,
+                    dateAdded = (System.currentTimeMillis() / 1000) - 3600,
+                    isFavorite = true,
+                    hasLyrics = false
+                )
+            )
+        }
+
+        _songs.value = sortSongsList(audioList, _songSortOrder.value)
+    }
+
+    private fun getOrCreateOfflineAudioUri(): Uri {
+        val sampleFile = File(context.filesDir, "sync_player_offline_audio.wav")
+        if (!sampleFile.exists()) {
+            try {
+                val sampleRate = 44100
+                val durationSeconds = 30
+                val numSamples = sampleRate * durationSeconds
+                val buffer = ByteArray(44 + numSamples * 2)
+
+                val totalDataLen = numSamples * 2 + 36
+                val byteRate = sampleRate * 2
+
+                buffer[0] = 'R'.code.toByte(); buffer[1] = 'I'.code.toByte(); buffer[2] = 'F'.code.toByte(); buffer[3] = 'F'.code.toByte()
+                buffer[4] = (totalDataLen and 0xff).toByte()
+                buffer[5] = ((totalDataLen shr 8) and 0xff).toByte()
+                buffer[6] = ((totalDataLen shr 16) and 0xff).toByte()
+                buffer[7] = ((totalDataLen shr 24) and 0xff).toByte()
+                buffer[8] = 'W'.code.toByte(); buffer[9] = 'A'.code.toByte(); buffer[10] = 'V'.code.toByte(); buffer[11] = 'E'.code.toByte()
+                buffer[12] = 'f'.code.toByte(); buffer[13] = 'm'.code.toByte(); buffer[14] = 't'.code.toByte(); buffer[15] = ' '.code.toByte()
+                buffer[16] = 16; buffer[17] = 0; buffer[18] = 0; buffer[19] = 0
+                buffer[20] = 1; buffer[21] = 0
+                buffer[22] = 1; buffer[23] = 0
+                buffer[24] = (sampleRate and 0xff).toByte()
+                buffer[25] = ((sampleRate shr 8) and 0xff).toByte()
+                buffer[26] = ((sampleRate shr 16) and 0xff).toByte()
+                buffer[27] = ((sampleRate shr 24) and 0xff).toByte()
+                buffer[28] = (byteRate and 0xff).toByte()
+                buffer[29] = ((byteRate shr 8) and 0xff).toByte()
+                buffer[30] = ((byteRate shr 16) and 0xff).toByte()
+                buffer[31] = ((byteRate shr 24) and 0xff).toByte()
+                buffer[32] = 2; buffer[33] = 0
+                buffer[34] = 16; buffer[35] = 0
+                buffer[36] = 'd'.code.toByte(); buffer[37] = 'a'.code.toByte(); buffer[38] = 't'.code.toByte(); buffer[39] = 'a'.code.toByte()
+                val dataLen = numSamples * 2
+                buffer[40] = (dataLen and 0xff).toByte()
+                buffer[41] = ((dataLen shr 8) and 0xff).toByte()
+                buffer[42] = ((dataLen shr 16) and 0xff).toByte()
+                buffer[43] = ((dataLen shr 24) and 0xff).toByte()
+
+                var offset = 44
+                for (i in 0 until numSamples) {
+                    val t = i.toDouble() / sampleRate
+                    val beatEnv = 0.5 + 0.5 * Math.sin(2.0 * Math.PI * 2.0 * t)
+                    val sampleVal = (Math.sin(2.0 * Math.PI * 220.0 * t) * 0.4 +
+                                    Math.sin(2.0 * Math.PI * 277.18 * t) * 0.3 +
+                                    Math.sin(2.0 * Math.PI * 329.63 * t) * 0.3) * beatEnv * 12000.0
+                    val shortVal = sampleVal.toInt().coerceIn(-32767, 32767).toShort()
+                    buffer[offset++] = (shortVal.toInt() and 0xff).toByte()
+                    buffer[offset++] = ((shortVal.toInt() shr 8) and 0xff).toByte()
+                }
+                sampleFile.writeBytes(buffer)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        return Uri.fromFile(sampleFile)
+    }
+
+    fun addEditedPhoto(photo: PhotoItem) {
+        val updated = listOf(photo) + _photos.value
+        _photos.value = updated
+    }
+
+    fun addEditedVideo(video: VideoItem) {
+        val updated = listOf(video) + _videos.value
+        _videos.value = updated
     }
 
     private fun loadDeviceVideos() {
@@ -508,10 +650,22 @@ class MediaRepository(private val context: Context) {
                     val parsed = parseLrcText(song.id, song.title, lrcContent)
                     if (parsed.lines.isNotEmpty()) return@withContext parsed
                 }
+                val companionUpper = File(song.path.substring(0, dotIdx) + ".LRC")
+                if (companionUpper.exists()) {
+                    val lrcContent = companionUpper.readText()
+                    val parsed = parseLrcText(song.id, song.title, lrcContent)
+                    if (parsed.lines.isNotEmpty()) return@withContext parsed
+                }
             }
         }
 
-        generateSyncedLyricsForTrack(song)
+        // No lyrics file found for this track - return empty lyrics so user can import or paste real lyrics
+        SyncedLyrics(
+            songId = song.id,
+            songTitle = song.title,
+            lines = emptyList(),
+            isTimecoded = false
+        )
     }
 
     fun saveLyricsForSong(songId: Long, lrcContent: String) {
@@ -554,39 +708,6 @@ class MediaRepository(private val context: Context) {
         )
     }
 
-    private fun generateSyncedLyricsForTrack(song: SongItem): SyncedLyrics {
-        val duration = if (song.durationMs > 0) song.durationMs else 180000L
-        val intervalMs = 7000L
-        val lines = mutableListOf<LyricLine>()
-
-        val lyricPhrases = listOf(
-            "♪ [Intro - ${song.artist}] ♪",
-            "Harmonic melody and crisp studio acoustics",
-            "Offline playback with rich dynamic equalizer",
-            "Immersive stereo depth and clarity",
-            "♪ [Instrumental Hook] ♪",
-            "Crystal vocal resonance and sub-bass frequencies",
-            "Pure offline audio architecture",
-            "Engineered by Traxxion Tech",
-            "♪ [Outro] ♪"
-        )
-
-        var currentTime = 3000L
-        var phraseIndex = 0
-        while (currentTime < duration - 4000L) {
-            lines.add(LyricLine(currentTime, lyricPhrases[phraseIndex % lyricPhrases.size]))
-            currentTime += intervalMs
-            phraseIndex++
-        }
-
-        return SyncedLyrics(
-            songId = song.id,
-            songTitle = song.title,
-            lines = lines,
-            isTimecoded = true
-        )
-    }
-
     // --- FAVORITES ---
 
     fun toggleFavorite(mediaId: Long) {
@@ -624,83 +745,72 @@ class MediaRepository(private val context: Context) {
         prefs.edit().putString("favorite_media_ids", array.toString()).apply()
     }
 
-    // --- PLAYLISTS ---
+    // --- PLAYLISTS (ROOM DATABASE PERSISTENCE) ---
+
+    private fun observeRoomPlaylists() {
+        repositoryScope.launch {
+            playlistDao.getAllPlaylistsWithSongs().collect { listWithSongs ->
+                if (listWithSongs.isEmpty()) {
+                    // Seed initial offline playlists in Room if database is fresh
+                    runCatching {
+                        playlistDao.insertPlaylist(PlaylistEntity(name = "Favorites", description = "Your handpicked media favorites"))
+                        playlistDao.insertPlaylist(PlaylistEntity(name = "Chill Vibes", description = "Relaxing offline sounds"))
+                        playlistDao.insertPlaylist(PlaylistEntity(name = "Drive Anthems", description = "High energy road tracks"))
+                    }
+                } else {
+                    _playlists.value = listWithSongs.map { pws ->
+                        Playlist(
+                            id = pws.playlist.id.toString(),
+                            name = pws.playlist.name,
+                            createdDate = pws.playlist.createdAt,
+                            songIds = pws.songs.map { it.id },
+                            description = pws.playlist.description
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     fun createPlaylist(name: String, description: String = "") {
-        val id = UUID.randomUUID().toString()
-        val playlist = Playlist(id = id, name = name, description = description)
-        val updated = _playlists.value + playlist
-        _playlists.value = updated
-        savePlaylists(updated)
+        repositoryScope.launch {
+            playlistDao.insertPlaylist(
+                PlaylistEntity(
+                    name = name,
+                    description = description,
+                    createdAt = System.currentTimeMillis()
+                )
+            )
+        }
     }
 
     fun addSongToPlaylist(playlistId: String, songId: Long) {
-        val updated = _playlists.value.map {
-            if (it.id == playlistId && !it.songIds.contains(songId)) {
-                it.copy(songIds = it.songIds + songId)
-            } else {
-                it
-            }
+        val pid = playlistId.toLongOrNull() ?: return
+        repositoryScope.launch {
+            playlistDao.addTrackToPlaylist(
+                PlaylistTrackCrossRef(
+                    playlistId = pid,
+                    mediaId = songId
+                )
+            )
         }
-        _playlists.value = updated
-        savePlaylists(updated)
     }
 
     fun removeSongFromPlaylist(playlistId: String, songId: Long) {
-        val updated = _playlists.value.map {
-            if (it.id == playlistId) {
-                it.copy(songIds = it.songIds - songId)
-            } else {
-                it
-            }
+        val pid = playlistId.toLongOrNull() ?: return
+        repositoryScope.launch {
+            playlistDao.removeTrackFromPlaylist(
+                playlistId = pid,
+                mediaId = songId
+            )
         }
-        _playlists.value = updated
-        savePlaylists(updated)
     }
 
-    private fun loadPlaylists() {
-        val plJson = prefs.getString("playlists_json", "[]") ?: "[]"
-        val list = mutableListOf<Playlist>()
-        try {
-            val array = JSONArray(plJson)
-            for (i in 0 until array.length()) {
-                val obj = array.getJSONObject(i)
-                val songArr = obj.getJSONArray("songIds")
-                val songIds = mutableListOf<Long>()
-                for (j in 0 until songArr.length()) {
-                    songIds.add(songArr.getLong(j))
-                }
-                list.add(
-                    Playlist(
-                        id = obj.getString("id"),
-                        name = obj.getString("name"),
-                        createdDate = obj.optLong("createdDate", System.currentTimeMillis()),
-                        songIds = songIds,
-                        description = obj.optString("description", "")
-                    )
-                )
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
+    fun deletePlaylist(playlistId: String) {
+        val pid = playlistId.toLongOrNull() ?: return
+        repositoryScope.launch {
+            playlistDao.deletePlaylistById(pid)
         }
-        _playlists.value = list
-    }
-
-    private fun savePlaylists(list: List<Playlist>) {
-        val array = JSONArray()
-        list.forEach { p ->
-            val obj = JSONObject().apply {
-                put("id", p.id)
-                put("name", p.name)
-                put("createdDate", p.createdDate)
-                put("description", p.description)
-                val songArr = JSONArray()
-                p.songIds.forEach { songArr.put(it) }
-                put("songIds", songArr)
-            }
-            array.put(obj)
-        }
-        prefs.edit().putString("playlists_json", array.toString()).apply()
     }
 
     // --- USER PROFILE & STATS ---
@@ -716,6 +826,7 @@ class MediaRepository(private val context: Context) {
         val videosWatched = prefs.getInt("stats_videos_watched", 0)
         val listeningMins = prefs.getLong("stats_listening_mins", 0L)
         val watchingMins = prefs.getLong("stats_watching_mins", 0L)
+        val firstLaunchDone = prefs.getBoolean("has_completed_first_launch", false)
 
         return UserProfile(
             fullName = name,
@@ -726,7 +837,8 @@ class MediaRepository(private val context: Context) {
             totalSongsPlayed = songsPlayed,
             totalVideosWatched = videosWatched,
             totalListeningMinutes = listeningMins,
-            totalWatchingMinutes = watchingMins
+            totalWatchingMinutes = watchingMins,
+            hasCompletedFirstLaunch = firstLaunchDone
         )
     }
 
@@ -742,6 +854,7 @@ class MediaRepository(private val context: Context) {
             .putInt("stats_videos_watched", profile.totalVideosWatched)
             .putLong("stats_listening_mins", profile.totalListeningMinutes)
             .putLong("stats_watching_mins", profile.totalWatchingMinutes)
+            .putBoolean("has_completed_first_launch", profile.hasCompletedFirstLaunch)
             .apply()
     }
 

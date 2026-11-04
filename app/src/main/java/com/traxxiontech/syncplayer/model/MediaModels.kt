@@ -131,6 +131,14 @@ enum class ThemeType(val displayName: String, val isDark: Boolean = true) {
     GOLD("Imperial Gold", isDark = true)
 }
 
+enum class MediaSortOrder(val displayName: String) {
+    LATEST("Latest Added"),
+    ALPHABETICAL_AZ("Title (A-Z)"),
+    ALPHABETICAL_ZA("Title (Z-A)"),
+    ARTIST("Artist"),
+    DURATION("Duration")
+}
+
 data class UserProfile(
     val fullName: String = "",
     val username: String = "",
@@ -140,7 +148,8 @@ data class UserProfile(
     val totalSongsPlayed: Int = 0,
     val totalVideosWatched: Int = 0,
     val totalListeningMinutes: Long = 0L,
-    val totalWatchingMinutes: Long = 0L
+    val totalWatchingMinutes: Long = 0L,
+    val hasCompletedFirstLaunch: Boolean = false
 )
 
 data class SmartScanReport(

@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -223,7 +224,23 @@ fun AboutScreen(
 
         item {
             ContactActionCard(
-                icon = Icons.Filled.Language,
+                logoContent = {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Brush.radialGradient(listOf(Color(0xFF00E5FF).copy(alpha = 0.35f), Color(0xFF003050))))
+                            .border(1.5.dp, Color(0xFF00E5FF), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Language,
+                            contentDescription = "Website",
+                            tint = Color(0xFF00E5FF),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                },
                 title = "Official Website",
                 subtitle = "traxxiontech.com",
                 accentColor = Color(0xFF00E5FF),
@@ -233,8 +250,23 @@ fun AboutScreen(
 
         item {
             ContactActionCard(
-                icon = Icons.Filled.OpenInBrowser,
-                title = "GitHub Repository",
+                logoContent = {
+                    // Authentic GitHub Octocat Logo badge
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(Color(0xFF2B3137), Color(0xFF24292E))))
+                            .border(1.5.dp, Color(0xFFE1E4E8), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "🐙",
+                            fontSize = 22.sp
+                        )
+                    }
+                },
+                title = "GitHub Profile & Code",
                 subtitle = "github.com/LGT09",
                 accentColor = Color(0xFFB388FF),
                 onClick = { openExternalUrl(context, "https://github.com/LGT09") }
@@ -243,10 +275,27 @@ fun AboutScreen(
 
         item {
             ContactActionCard(
-                icon = Icons.Filled.Email,
+                logoContent = {
+                    // Authentic Gmail / Mail badge
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFFEA4335), Color(0xFFD93025))))
+                            .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Email,
+                            contentDescription = "Email",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                },
                 title = "Email Developer",
                 subtitle = "traxxiontech@gmail.com",
-                accentColor = Color(0xFFFF5252),
+                accentColor = Color(0xFFEA4335),
                 onClick = {
                     val intent = Intent(Intent.ACTION_SENDTO).apply {
                         data = Uri.parse("mailto:traxxiontech@gmail.com")
@@ -259,10 +308,27 @@ fun AboutScreen(
 
         item {
             ContactActionCard(
-                icon = Icons.Filled.Share,
+                logoContent = {
+                    // Authentic WhatsApp Emerald Badge with Chat Bubble & Phone
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(Color(0xFF25D366), Color(0xFF128C7E))))
+                            .border(1.5.dp, Color(0xFF25D366).copy(alpha = 0.8f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Call,
+                            contentDescription = "WhatsApp",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                },
                 title = "WhatsApp Chat",
                 subtitle = "+263 716 857 999",
-                accentColor = Color(0xFF00E676),
+                accentColor = Color(0xFF25D366),
                 onClick = {
                     openExternalUrl(context, "https://wa.me/263716857999?text=Hello%20Vincent,%20I%20am%20using%20Sync%20Player")
                 }
@@ -271,10 +337,27 @@ fun AboutScreen(
 
         item {
             ContactActionCard(
-                icon = Icons.Filled.Call,
+                logoContent = {
+                    // Direct Phone Hotline Badge
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(Color(0xFFFFB300), Color(0xFFFF8F00))))
+                            .border(1.5.dp, Color(0xFFFFD54F), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Call,
+                            contentDescription = "Telephone",
+                            tint = Color.Black,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                },
                 title = "Telephone Call",
                 subtitle = "+263 716 857 999",
-                accentColor = Color(0xFFFFD700),
+                accentColor = Color(0xFFFFB300),
                 onClick = {
                     val intent = Intent(Intent.ACTION_DIAL).apply {
                         data = Uri.parse("tel:+263716857999")
@@ -286,7 +369,25 @@ fun AboutScreen(
 
         item {
             ContactActionCard(
-                icon = Icons.Filled.Language,
+                logoContent = {
+                    // Authentic Facebook Blue Rounded Badge with lowercase 'f'
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF1877F2))
+                            .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "f",
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                },
                 title = "Facebook Page",
                 subtitle = "Traxxion Tech",
                 accentColor = Color(0xFF1877F2),
@@ -300,7 +401,7 @@ fun AboutScreen(
 
 @Composable
 fun ContactActionCard(
-    icon: ImageVector,
+    logoContent: @Composable () -> Unit,
     title: String,
     subtitle: String,
     accentColor: Color,
@@ -321,27 +422,13 @@ fun ContactActionCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(accentColor.copy(alpha = 0.2f))
-                        .border(1.dp, accentColor.copy(alpha = 0.6f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = title,
-                        tint = accentColor,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                logoContent()
                 Spacer(modifier = Modifier.width(14.dp))
                 Column {
                     Text(
                         text = title,
                         fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.6f)
+                        color = Color.White.copy(alpha = 0.65f)
                     )
                     Text(
                         text = subtitle,
@@ -356,14 +443,14 @@ fun ContactActionCard(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(glassColors.surfaceGlassSecondary)
-                    .border(1.dp, glassColors.glowColor.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .border(1.dp, accentColor.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Text(
                     text = "Open",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = glassColors.glowColor
+                    color = accentColor
                 )
             }
         }

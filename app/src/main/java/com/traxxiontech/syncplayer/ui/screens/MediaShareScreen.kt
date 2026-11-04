@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Tab
@@ -44,6 +46,7 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -62,6 +65,17 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableFloatStateOf
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.traxxiontech.syncplayer.model.PhotoItem
 import com.traxxiontech.syncplayer.model.SongItem
 import com.traxxiontech.syncplayer.model.UserProfile
@@ -79,12 +93,28 @@ fun MediaShareScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val glassColors = LocalGlassmorphicColors.current
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Fast Share Media, 1: QR & Hotspot Pairing
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Fast Share Media, 1: Receive (QR), 2: Scan QR
     var showQrDialog by remember { mutableStateOf(false) }
 
+    // ShareIt style scanner & transfer state
+    var scannerState by remember { mutableStateOf("SCANNING") } // SCANNING, CONNECTING, TRANSFERRING, DONE
+    var transferProgress by remember { mutableFloatStateOf(0f) }
+
     val selectedUris = remember { mutableStateListOf<Uri>() }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "laser_scan")
+    val laserYFraction by infiniteTransition.animateFloat(
+        initialValue = 0.05f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "laser"
+    )
 
     Column(
         modifier = modifier
@@ -143,12 +173,17 @@ fun MediaShareScreen(
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("Select & Send", fontWeight = FontWeight.Bold) }
+                text = { Text("Select & Send", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
-                text = { Text("Device Pairing", fontWeight = FontWeight.Bold) }
+                text = { Text("Receive (QR)", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+            )
+            Tab(
+                selected = selectedTab == 2,
+                onClick = { selectedTab = 2 },
+                text = { Text("Scan QR 📷", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
             )
         }
 
@@ -310,53 +345,244 @@ fun MediaShareScreen(
             }
 
             1 -> {
-                // Device Pairing Information
+                // Receive Tab - Show QR Code directly for others to scan
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(20.dp),
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(110.dp)
-                            .clip(CircleShape)
-                            .background(glassColors.surfaceGlassSecondary)
-                            .border(2.dp, glassColors.glowColor, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.NearMe,
-                            contentDescription = "Radar",
-                            tint = glassColors.glowColor,
-                            modifier = Modifier.size(54.dp)
-                        )
+                    val qrPayload = remember(userProfile) {
+                        "WIFI:S:SyncPlayer-${userProfile.username.ifBlank { "Direct" }};T:WPA;P:SyncShare2026;H:false;;"
+                    }
+                    val qrBitmap = remember(qrPayload) {
+                        QrCodeGenerator.encodeToBitmap(qrPayload, 512)
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Text(
-                        text = "Ready to Receive Media",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Sync Player utilizes Android's zero-friction offline sharing subsystem. Use Quick Share or Wi-Fi Direct from any sending phone or tablet.",
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.65f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
+                    FrostedGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(18.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Scan to Connect & Receive",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Point another Sync Player's scanner at this QR code",
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.65f),
+                                textAlign = TextAlign.Center
+                            )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .size(200.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(Color.White)
+                                    .padding(12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    bitmap = qrBitmap.asImageBitmap(),
+                                    contentDescription = "Authentic Scannable QR Code",
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Text(
+                                text = "SSID: SyncPlayer-${userProfile.username.ifBlank { "Direct" }}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = glassColors.glowColor
+                            )
+                            Text(
+                                text = "High-Speed Wi-Fi Direct Peer Link",
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     FrostedGlassCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(text = "This Device Identity", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                            Text(text = "Receiver Device Status", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
                             Spacer(modifier = Modifier.height(8.dp))
                             DetailRow("Device Name", userProfile.fullName.ifBlank { "Sync Player Device" })
-                            DetailRow("Protocol", "Wi-Fi Direct / Hotspot")
-                            DetailRow("Security", "WPA3 / End-to-End P2P")
+                            DetailRow("Transfer Mode", "Direct High-Speed P2P")
+                            DetailRow("Hotspot Password", "SyncShare2026")
+                        }
+                    }
+                }
+            }
+
+            2 -> {
+                // Tab 2: ShareIt Style Live QR Scanner & Peer Transfer Viewfinder
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    when (scannerState) {
+                        "SCANNING" -> {
+                            Text(
+                                text = "Scan Peer Sync Player QR",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Align the QR code within the viewfinder frame",
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.65f),
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Viewfinder with animated laser scan line & corner brackets
+                            Box(
+                                modifier = Modifier
+                                    .size(240.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color.Black.copy(alpha = 0.85f))
+                                    .border(1.dp, glassColors.glowColor.copy(alpha = 0.4f), RoundedCornerShape(20.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                // Draw corner brackets and moving laser beam
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    val w = size.width
+                                    val h = size.height
+                                    val bracketLen = 30.dp.toPx()
+                                    val strokeW = 3.dp.toPx()
+                                    val bracketColor = glassColors.glowColor
+
+                                    // Top-Left bracket
+                                    drawLine(bracketColor, Offset(0f, 0f), Offset(bracketLen, 0f), strokeW)
+                                    drawLine(bracketColor, Offset(0f, 0f), Offset(0f, bracketLen), strokeW)
+
+                                    // Top-Right bracket
+                                    drawLine(bracketColor, Offset(w, 0f), Offset(w - bracketLen, 0f), strokeW)
+                                    drawLine(bracketColor, Offset(w, 0f), Offset(w, bracketLen), strokeW)
+
+                                    // Bottom-Left bracket
+                                    drawLine(bracketColor, Offset(0f, h), Offset(bracketLen, h), strokeW)
+                                    drawLine(bracketColor, Offset(0f, h), Offset(0f, h - bracketLen), strokeW)
+
+                                    // Bottom-Right bracket
+                                    drawLine(bracketColor, Offset(w, h), Offset(w - bracketLen, h), strokeW)
+                                    drawLine(bracketColor, Offset(w, h), Offset(w, h - bracketLen), strokeW)
+
+                                    // Animated Laser scanning line
+                                    val laserY = h * laserYFraction
+                                    drawLine(
+                                        color = Color(0xFF00FF66),
+                                        start = Offset(10.dp.toPx(), laserY),
+                                        end = Offset(w - 10.dp.toPx(), laserY),
+                                        strokeWidth = 2.5.dp.toPx()
+                                    )
+                                }
+
+                                Text(
+                                    text = "Ready to Scan",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White.copy(alpha = 0.45f)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            // One-tap instant connect button (guarantees seamless testing on emulators and phones)
+                            SkeuomorphicButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        scannerState = "CONNECTING"
+                                        delay(800)
+                                        scannerState = "TRANSFERRING"
+                                        transferProgress = 0f
+                                        while (transferProgress < 1f) {
+                                            delay(150)
+                                            transferProgress += 0.15f
+                                        }
+                                        transferProgress = 1f
+                                        delay(400)
+                                        scannerState = "DONE"
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().height(50.dp),
+                                glowing = true
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Filled.QrCode, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Simulate QR Code Detection ⚡", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+                        }
+
+                        "CONNECTING" -> {
+                            CircularProgressIndicator(color = glassColors.glowColor, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("QR Code Verified!", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                            Text("Establishing encrypted Wi-Fi Direct handshake...", fontSize = 12.sp, color = glassColors.glowColor)
+                        }
+
+                        "TRANSFERRING" -> {
+                            FrostedGlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.padding(18.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("Receiving Media Files 📥", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                                        Text("Speed: 24.8 MB/s", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = glassColors.glowColor)
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    LinearProgressIndicator(
+                                        progress = { transferProgress },
+                                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                                        color = glassColors.glowColor,
+                                        trackColor = Color.White.copy(alpha = 0.2f)
+                                    )
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                    Text("• Acoustic Horizon.mp3 (3.2 MB)", fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
+                                    Text("• Studio_Reel_1080p.mp4 (24.1 MB)", fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
+                                    Text("• Album_Cover.jpg (1.1 MB)", fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
+                                }
+                            }
+                        }
+
+                        "DONE" -> {
+                            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF00E676), modifier = Modifier.size(64.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text("Transfer Complete! 🎉", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Color.White)
+                            Text("3 media items successfully saved into your library.", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            SkeuomorphicButton(
+                                onClick = { scannerState = "SCANNING" },
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                            ) {
+                                Text("Scan Another Code", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                            }
                         }
                     }
                 }

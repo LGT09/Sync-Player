@@ -42,7 +42,17 @@
             </intent-filter>
         </activity>
 
-        <!-- Foreground Service for Background Audio Playback -->
+        <!-- Media3 MediaSession Foreground Service for Audio Playback & Notification Controls -->
+        <service
+            android:name=".service.MediaPlaybackService"
+            android:enabled="true"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".service.MusicPlaybackService"
             android:enabled="true"

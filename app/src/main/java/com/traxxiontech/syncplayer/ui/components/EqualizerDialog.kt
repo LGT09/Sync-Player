@@ -87,17 +87,14 @@ fun EqualizerDialog(
         mutableStateListOf(6f, 4f, 1f, 2f, 4f)
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.testTag("eq_apply_button")
-            ) {
-                Text("Apply & Close", color = glassColors.glowColor, fontWeight = FontWeight.Bold)
-            }
-        },
-        title = {
+    GlassmorphicDialog(
+        onDismissRequest = onDismiss
+    ) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -129,13 +126,7 @@ fun EqualizerDialog(
                     )
                 )
             }
-        },
-        text = {
-            Column(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-            ) {
+            Spacer(modifier = Modifier.height(14.dp))
                 Text(
                     text = "Acoustic Tuning Presets",
                     fontSize = 12.sp,
@@ -253,8 +244,21 @@ fun EqualizerDialog(
                     ),
                     modifier = Modifier.height(30.dp)
                 )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.testTag("eq_apply_button")
+                    ) {
+                        Text("Apply & Close", color = glassColors.glowColor, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
-        },
-        containerColor = Color(0xFF131722)
-    )
+        }
+    }
 }

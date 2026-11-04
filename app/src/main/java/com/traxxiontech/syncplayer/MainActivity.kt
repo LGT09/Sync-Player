@@ -87,12 +87,16 @@ import com.traxxiontech.syncplayer.data.MediaRepository
 import com.traxxiontech.syncplayer.model.MediaType
 import com.traxxiontech.syncplayer.model.PhotoItem
 import com.traxxiontech.syncplayer.model.SongItem
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ContentCut
+import com.traxxiontech.syncplayer.model.MediaSortOrder
 import com.traxxiontech.syncplayer.model.SyncedLyrics
 import com.traxxiontech.syncplayer.model.ThemeType
 import com.traxxiontech.syncplayer.model.UserProfile
 import com.traxxiontech.syncplayer.model.VaultMediaItem
 import com.traxxiontech.syncplayer.model.VideoItem
 import com.traxxiontech.syncplayer.service.MusicPlaybackService
+import com.traxxiontech.syncplayer.ui.components.AmbientLiquidBackground
 import com.traxxiontech.syncplayer.ui.components.FrostedGlassCard
 import com.traxxiontech.syncplayer.ui.components.MiniPlayerBar
 import com.traxxiontech.syncplayer.ui.screens.AboutScreen
@@ -102,6 +106,7 @@ import com.traxxiontech.syncplayer.ui.screens.FullscreenVideoPlayer
 import com.traxxiontech.syncplayer.ui.screens.HomeScreen
 import com.traxxiontech.syncplayer.ui.screens.MediaManagerScreen
 import com.traxxiontech.syncplayer.ui.screens.MediaShareScreen
+import com.traxxiontech.syncplayer.ui.screens.MediaStudioScreen
 import com.traxxiontech.syncplayer.ui.screens.PhotoGalleryScreen
 import com.traxxiontech.syncplayer.ui.screens.SettingsScreen
 import com.traxxiontech.syncplayer.ui.screens.SongRowItem
@@ -198,6 +203,7 @@ fun SyncPlayerMainContent(
     val vaultItems by repository.vaultItems.collectAsStateWithLifecycle()
     val userProfile by repository.userProfile.collectAsStateWithLifecycle()
     val isScanning by repository.isScanning.collectAsStateWithLifecycle()
+    val songSortOrder by repository.songSortOrder.collectAsStateWithLifecycle()
 
     // Playback state
     val playbackState by MusicPlaybackService.playbackState.collectAsStateWithLifecycle()
@@ -255,7 +261,7 @@ fun SyncPlayerMainContent(
         MainScreenState.SPLASH -> {
             SplashScreen(
                 onSplashFinished = {
-                    screenState = if (userProfile.fullName.isBlank()) {
+                    screenState = if (!repository.hasCompletedFirstLaunch()) {
                         MainScreenState.WELCOME_PROFILE
                     } else {
                         MainScreenState.MAIN
@@ -269,6 +275,7 @@ fun SyncPlayerMainContent(
                 currentProfile = userProfile,
                 onCompleteProfile = { updated ->
                     repository.updateUserProfile(updated)
+                    repository.setFirstLaunchCompleted()
                     onThemeChanged(updated.favoriteTheme)
                     screenState = MainScreenState.MAIN
                 }
@@ -365,6 +372,10 @@ fun SyncPlayerMainContent(
                                 currentNavRoute = "photos"
                                 coroutineScope.launch { drawerState.close() }
                             }
+                            DrawerNavItem("Media Studio ✂️", Icons.Filled.ContentCut, currentNavRoute == "studio") {
+                                currentNavRoute = "studio"
+                                coroutineScope.launch { drawerState.close() }
+                            }
                             DrawerNavItem("Offline Share", Icons.Filled.Share, currentNavRoute == "share") {
                                 currentNavRoute = "share"
                                 coroutineScope.launch { drawerState.close() }
@@ -420,7 +431,7 @@ fun SyncPlayerMainContent(
                                         color = Color.White
                                     )
                                     Text(
-                                        text = "Traxxion Tech 🇿🇼",
+                                        text = "Offline Media Hub",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = glassColors.glowColor
@@ -558,10 +569,9 @@ fun SyncPlayerMainContent(
                     },
                     containerColor = Color.Transparent
                 ) { innerPadding ->
-                    Box(
+                    AmbientLiquidBackground(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Brush.verticalGradient(glassColors.backgroundGradient))
                             .padding(innerPadding)
                     ) {
                         when (currentNavRoute) {
@@ -571,6 +581,8 @@ fun SyncPlayerMainContent(
                                 videos = videos,
                                 photos = photos,
                                 playlists = playlists,
+                                currentSortOrder = songSortOrder,
+                                onSortOrderChanged = { repository.setSongSortOrder(it) },
                                 onSongClick = { song ->
                                     getService()?.setQueue(songs, songs.indexOf(song))
                                     isFullPlayerVisible = true
@@ -736,6 +748,15 @@ fun SyncPlayerMainContent(
                                     coroutineScope.launch { repository.scanDeviceMedia() }
                                 },
                                 onNavigateToAbout = { currentNavRoute = "about" }
+                            )
+
+                            "studio" -> MediaStudioScreen(
+                                photos = photos,
+                                videos = videos,
+                                songs = songs,
+                                onSavePhoto = { repository.addEditedPhoto(it) },
+                                onSaveVideo = { repository.addEditedVideo(it) },
+                                onBack = { currentNavRoute = "home" }
                             )
 
                             "about" -> AboutScreen()

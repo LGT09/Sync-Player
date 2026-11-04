@@ -81,25 +81,51 @@ fun SoundWaveSeeker(
     }
 
     val totalDuration = if (durationMs > 0) durationMs else 1L
-    val currentFraction = (progressMs.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
+    val safeProgress = if (progressMs >= 0) progressMs else 0L
+    val currentFraction = if (totalDuration > 0) {
+        (safeProgress.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
+    } else 0f
 
     Column(modifier = modifier.testTag("sound_wave_seeker")) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(64.dp)
                 .pointerInput(totalDuration) {
-                    detectTapGestures { offset ->
-                        val tappedFraction = (offset.x / size.width).coerceIn(0f, 1f)
-                        onSeekTo((tappedFraction * totalDuration).toLong())
-                    }
+                    detectTapGestures(
+                        onTap = { offset ->
+                            if (size.width > 0) {
+                                val ratio = offset.x / size.width.toFloat()
+                                if (!ratio.isNaN() && !ratio.isInfinite()) {
+                                    val targetMs = (ratio.coerceIn(0f, 1f) * totalDuration).toLong().coerceIn(0L, totalDuration)
+                                    onSeekTo(targetMs)
+                                }
+                            }
+                        }
+                    )
                 }
                 .pointerInput(totalDuration) {
-                    detectDragGestures { change, _ ->
-                        change.consume()
-                        val dragFraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                        onSeekTo((dragFraction * totalDuration).toLong())
-                    }
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            if (size.width > 0) {
+                                val ratio = offset.x / size.width.toFloat()
+                                if (!ratio.isNaN() && !ratio.isInfinite()) {
+                                    val targetMs = (ratio.coerceIn(0f, 1f) * totalDuration).toLong().coerceIn(0L, totalDuration)
+                                    onSeekTo(targetMs)
+                                }
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            if (size.width > 0) {
+                                val ratio = change.position.x / size.width.toFloat()
+                                if (!ratio.isNaN() && !ratio.isInfinite()) {
+                                    val targetMs = (ratio.coerceIn(0f, 1f) * totalDuration).toLong().coerceIn(0L, totalDuration)
+                                    onSeekTo(targetMs)
+                                }
+                            }
+                        }
+                    )
                 }
         ) {
             Canvas(modifier = Modifier.fillMaxWidth().height(56.dp)) {
