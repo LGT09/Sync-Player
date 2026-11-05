@@ -56,6 +56,12 @@ interface MediaDao {
     @Query("UPDATE media_items SET isFavorite = :isFav WHERE id = :id")
     suspend fun updateFavorite(id: Long, isFav: Boolean)
 
+    @Query("SELECT * FROM media_items WHERE tags LIKE '%' || :tag || '%' ORDER BY title ASC")
+    fun getMediaByTag(tag: String): Flow<List<MediaItemEntity>>
+
+    @Query("UPDATE media_items SET tags = :tags WHERE id = :id")
+    suspend fun updateTags(id: Long, tags: String)
+
     @Query("UPDATE media_items SET playCount = playCount + 1, lastPlayedTimestamp = :timestamp WHERE id = :id")
     suspend fun incrementPlayCount(id: Long, timestamp: Long = System.currentTimeMillis())
 

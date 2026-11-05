@@ -573,6 +573,96 @@ class MediaRepository(private val context: Context) {
         loadDevicePhotos()
     }
 
+    fun getVaultItemPlayableUri(item: VaultMediaItem): Uri? {
+        val ext = when (item.type) {
+            MediaType.AUDIO -> "mp3"
+            MediaType.VIDEO -> "mp4"
+            MediaType.PHOTO -> "jpg"
+        }
+        val tempFile = vaultCrypto.getDecryptedTempFile(item.id, ext) ?: return null
+        return Uri.fromFile(tempFile)
+    }
+
+    suspend fun importMedia(uri: Uri): SongItem? = withContext(Dispatchers.IO) {
+        try {
+            var fileName = "Imported Media"
+            var fileSize = 0L
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (cursor.moveToFirst()) {
+                    if (nameIndex != -1) fileName = cursor.getString(nameIndex) ?: fileName
+                    if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex)
+                }
+            }
+
+            val mime = context.contentResolver.getType(uri) ?: ""
+            val id = System.currentTimeMillis()
+            val cleanTitle = fileName.substringBeforeLast(".")
+
+            if (mime.startsWith("video") || fileName.endsWith(".mp4", ignoreCase = true) || fileName.endsWith(".mkv", ignoreCase = true)) {
+                val video = VideoItem(
+                    id = id,
+                    title = cleanTitle,
+                    durationMs = 0L,
+                    uri = uri,
+                    path = uri.toString(),
+                    sizeBytes = fileSize,
+                    dateAdded = System.currentTimeMillis()
+                )
+                _videos.value = listOf(video) + _videos.value
+                null
+            } else if (mime.startsWith("image") || fileName.endsWith(".jpg", ignoreCase = true) || fileName.endsWith(".png", ignoreCase = true)) {
+                val photo = PhotoItem(
+                    id = id,
+                    title = cleanTitle,
+                    uri = uri,
+                    path = uri.toString(),
+                    sizeBytes = fileSize,
+                    dateAdded = System.currentTimeMillis()
+                )
+                _photos.value = listOf(photo) + _photos.value
+                null
+            } else {
+                val song = SongItem(
+                    id = id,
+                    title = cleanTitle,
+                    artist = "Imported",
+                    album = "Sync Imports",
+                    albumId = 0L,
+                    durationMs = 0L,
+                    uri = uri,
+                    path = uri.toString(),
+                    sizeBytes = fileSize,
+                    dateAdded = System.currentTimeMillis(),
+                    tags = "Imported, Offline"
+                )
+                _songs.value = listOf(song) + _songs.value
+                // Persist to Room database
+                mediaDao.insertItem(
+                    MediaItemEntity(
+                        id = song.id,
+                        title = song.title,
+                        artist = song.artist,
+                        album = song.album,
+                        albumId = song.albumId,
+                        durationMs = song.durationMs,
+                        uriString = song.uri.toString(),
+                        path = song.path,
+                        sizeBytes = song.sizeBytes,
+                        dateAdded = song.dateAdded,
+                        mediaType = "AUDIO",
+                        tags = "Imported, Offline"
+                    )
+                )
+                song
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     private fun loadVaultItems() {
         val json = prefs.getString("vault_media_json", "[]") ?: "[]"
         val list = mutableListOf<VaultMediaItem>()

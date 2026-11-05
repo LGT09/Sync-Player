@@ -18,7 +18,8 @@ data class SongItem(
     val sizeBytes: Long = 0L,
     val dateAdded: Long = 0L,
     val isFavorite: Boolean = false,
-    val hasLyrics: Boolean = false
+    val hasLyrics: Boolean = false,
+    val tags: String = ""
 ) {
     val durationFormatted: String
         get() {

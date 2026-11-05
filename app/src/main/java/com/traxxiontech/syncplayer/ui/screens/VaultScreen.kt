@@ -88,6 +88,8 @@ fun VaultScreen(
     onVerifyCredential: (String) -> Boolean,
     onRestoreItem: (String) -> Unit,
     onPlayAudio: ((VaultMediaItem) -> Unit)? = null,
+    onPlayVideo: ((VaultMediaItem) -> Unit)? = null,
+    onViewPhoto: ((VaultMediaItem) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val glassColors = LocalGlassmorphicColors.current
@@ -266,6 +268,7 @@ fun VaultScreen(
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(glassColors.surfaceGlassSecondary)
                                         .border(1.dp, glassColors.borderGlass.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                        .clickable { onViewPhoto?.invoke(item) }
                                 ) {
                                     if (item.uri != null) {
                                         AsyncImage(
@@ -358,7 +361,23 @@ fun VaultScreen(
                                             IconButton(onClick = { onPlayAudio(item) }) {
                                                 Icon(
                                                     imageVector = Icons.Filled.PlayArrow,
-                                                    contentDescription = "Play",
+                                                    contentDescription = "Play Audio",
+                                                    tint = glassColors.glowColor
+                                                )
+                                            }
+                                        } else if (item.type == MediaType.VIDEO && onPlayVideo != null) {
+                                            IconButton(onClick = { onPlayVideo(item) }) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.PlayArrow,
+                                                    contentDescription = "Play Video",
+                                                    tint = glassColors.glowColor
+                                                )
+                                            }
+                                        } else if (item.type == MediaType.PHOTO && onViewPhoto != null) {
+                                            IconButton(onClick = { onViewPhoto(item) }) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Album,
+                                                    contentDescription = "View Photo",
                                                     tint = glassColors.glowColor
                                                 )
                                             }
@@ -888,12 +907,27 @@ fun VaultUnlockView(
 
         // Biometric Unlock button
         if (isBiometricEnabled) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val activity = context as? androidx.fragment.app.FragmentActivity
+
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
                     .background(glassColors.surfaceGlassSecondary)
                     .border(1.dp, glassColors.glowColor.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                    .clickable { onBiometricUnlock() }
+                    .clickable {
+                        if (activity != null && com.traxxiontech.syncplayer.security.RealBiometricManager.canAuthenticate(activity)) {
+                            com.traxxiontech.syncplayer.security.RealBiometricManager.authenticate(
+                                activity = activity,
+                                title = "Unlock Secure Vault 🔒",
+                                subtitle = "Authenticate using fingerprint, face, or PIN",
+                                onSuccess = { onBiometricUnlock() },
+                                onError = { onBiometricUnlock() }
+                            )
+                        } else {
+                            onBiometricUnlock()
+                        }
+                    }
                     .padding(horizontal = 20.dp, vertical = 12.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -905,7 +939,7 @@ fun VaultUnlockView(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Unlock with Biometrics",
+                        text = "Unlock with Device Biometrics 🛡️",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White

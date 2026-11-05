@@ -252,9 +252,11 @@ fun Media3PlayerCard(
 
             // Soundwave Seeker
             SoundWaveSeeker(
-                currentPositionMs = playbackState.currentPositionMs,
+                progressMs = playbackState.currentPositionMs,
                 durationMs = playbackState.durationMs,
-                onSeek = onSeekTo,
+                isPlaying = playbackState.isPlaying,
+                songId = currentSong?.id ?: 0L,
+                onSeekTo = onSeekTo,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(44.dp)

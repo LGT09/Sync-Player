@@ -19,4 +19,9 @@ data class PlaybackState(
     val eqEnabled: Boolean = false
 )
 
-open class MusicPlaybackService : MediaPlaybackService()
+open class MusicPlaybackService : MediaPlaybackService() {
+    companion object {
+        val playbackState: kotlinx.coroutines.flow.StateFlow<PlaybackState>
+            get() = MediaPlaybackService.playbackState
+    }
+}

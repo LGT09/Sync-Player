@@ -8,10 +8,12 @@ import android.content.ServiceConnection
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.compose.material.icons.filled.AddCircle
+import com.traxxiontech.syncplayer.util.MediaPermissionHelper
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -95,6 +97,7 @@ import com.traxxiontech.syncplayer.model.ThemeType
 import com.traxxiontech.syncplayer.model.UserProfile
 import com.traxxiontech.syncplayer.model.VaultMediaItem
 import com.traxxiontech.syncplayer.model.VideoItem
+import com.traxxiontech.syncplayer.service.MediaPlaybackService
 import com.traxxiontech.syncplayer.service.MusicPlaybackService
 import com.traxxiontech.syncplayer.ui.components.AmbientLiquidBackground
 import com.traxxiontech.syncplayer.ui.components.FrostedGlassCard
@@ -118,15 +121,15 @@ import com.traxxiontech.syncplayer.ui.theme.LocalGlassmorphicColors
 import com.traxxiontech.syncplayer.ui.theme.SyncPlayerTheme
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private lateinit var repository: MediaRepository
-    private var playbackService: MusicPlaybackService? = null
+    private var playbackService: MediaPlaybackService? = null
     private var isServiceBound = false
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            val binder = service as? MusicPlaybackService.LocalBinder
+            val binder = service as? MediaPlaybackService.LocalBinder
             playbackService = binder?.getService()
             isServiceBound = true
         }
@@ -186,7 +189,7 @@ enum class MainScreenState {
 @Composable
 fun SyncPlayerMainContent(
     repository: MediaRepository,
-    getService: () -> MusicPlaybackService?,
+    getService: () -> MediaPlaybackService?,
     onThemeChanged: (ThemeType) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -206,7 +209,7 @@ fun SyncPlayerMainContent(
     val songSortOrder by repository.songSortOrder.collectAsStateWithLifecycle()
 
     // Playback state
-    val playbackState by MusicPlaybackService.playbackState.collectAsStateWithLifecycle()
+    val playbackState by MediaPlaybackService.playbackState.collectAsStateWithLifecycle()
 
     // Full screen overlays
     var isFullPlayerVisible by remember { mutableStateOf(false) }
@@ -217,7 +220,7 @@ fun SyncPlayerMainContent(
     // Drawer state
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
-    // Request permissions on start
+    // Request permissions on start via MediaPermissionHelper
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -227,16 +230,26 @@ fun SyncPlayerMainContent(
     }
 
     LaunchedEffect(Unit) {
-        val permissions = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
-            permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
-            permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        permissionLauncher.launch(MediaPermissionHelper.getRequiredPermissions())
+    }
+
+    // Media file importer (Audio, Video, Photos)
+    val mediaImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            coroutineScope.launch {
+                var lastImportedSong: SongItem? = null
+                uris.forEach { u ->
+                    val song = repository.importMedia(u)
+                    if (song != null) lastImportedSong = song
+                }
+                lastImportedSong?.let { song ->
+                    getService()?.setQueue(listOf(song), 0)
+                    isFullPlayerVisible = true
+                }
+            }
         }
-        permissionLauncher.launch(permissions.toTypedArray())
     }
 
     // Load lyrics when current song changes
@@ -440,6 +453,19 @@ fun SyncPlayerMainContent(
                             }
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = {
+                                        mediaImportLauncher.launch(arrayOf("audio/*", "video/*", "image/*"))
+                                    },
+                                    modifier = Modifier.testTag("import_media_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.AddCircle,
+                                        contentDescription = "Import Media",
+                                        tint = glassColors.glowColor
+                                    )
+                                }
+
                                 IconButton(
                                     onClick = { currentNavRoute = "vault" },
                                     modifier = Modifier.testTag("vault_shortcut_button")
@@ -720,21 +746,50 @@ fun SyncPlayerMainContent(
                                 },
                                 onRestoreItem = { id -> repository.unlockMedia(id) },
                                 onPlayAudio = { item ->
-                                    item.uri?.let { uri ->
+                                    val playableUri = repository.getVaultItemPlayableUri(item)
+                                    if (playableUri != null) {
                                         val tempSong = SongItem(
-                                            id = item.id.toLongOrNull() ?: 0L,
+                                            id = item.id.toLongOrNull() ?: System.currentTimeMillis(),
                                             title = item.title,
                                             artist = "Vault Audio",
                                             album = "Secure Vault",
                                             albumId = -1L,
                                             durationMs = 0L,
-                                            uri = uri,
+                                            uri = playableUri,
                                             path = item.originalPath,
                                             sizeBytes = item.sizeBytes,
                                             dateAdded = item.dateLocked
                                         )
                                         getService()?.setQueue(listOf(tempSong), 0)
                                         isFullPlayerVisible = true
+                                    }
+                                },
+                                onPlayVideo = { item ->
+                                    val playableUri = repository.getVaultItemPlayableUri(item)
+                                    if (playableUri != null) {
+                                        viewingVideo = VideoItem(
+                                            id = item.id.toLongOrNull() ?: System.currentTimeMillis(),
+                                            title = item.title,
+                                            durationMs = 0L,
+                                            uri = playableUri,
+                                            path = item.originalPath,
+                                            sizeBytes = item.sizeBytes,
+                                            resolution = "Vault Video",
+                                            dateAdded = item.dateLocked
+                                        )
+                                    }
+                                },
+                                onViewPhoto = { item ->
+                                    val playableUri = repository.getVaultItemPlayableUri(item)
+                                    if (playableUri != null) {
+                                        viewingPhoto = PhotoItem(
+                                            id = item.id.toLongOrNull() ?: System.currentTimeMillis(),
+                                            title = item.title,
+                                            uri = playableUri,
+                                            path = item.originalPath,
+                                            sizeBytes = item.sizeBytes,
+                                            dateAdded = item.dateLocked
+                                        )
                                     }
                                 }
                             )

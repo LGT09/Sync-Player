@@ -73,6 +73,7 @@ import com.traxxiontech.syncplayer.ui.components.EqualizerDialog
 import com.traxxiontech.syncplayer.ui.components.SkeuomorphicButton
 import com.traxxiontech.syncplayer.ui.components.SkeuomorphicKnob
 import com.traxxiontech.syncplayer.ui.components.SkeuomorphicSlider
+import com.traxxiontech.syncplayer.ui.components.SongAudioVisualizer
 import com.traxxiontech.syncplayer.ui.components.SoundWaveSeeker
 import com.traxxiontech.syncplayer.ui.components.WaveformVisualizer
 import com.traxxiontech.syncplayer.ui.theme.LocalGlassmorphicColors
@@ -413,12 +414,11 @@ fun FullMusicPlayerScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                WaveformVisualizer(
+                SongAudioVisualizer(
                     isPlaying = playbackState.isPlaying,
-                    barCount = 36,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(34.dp)
+                    barCount = 32,
+                    maxHeightDp = 38.dp,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 

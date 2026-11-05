@@ -24,5 +24,6 @@ data class MediaItemEntity(
     val height: Int = 0,
     val bucketName: String = "",
     val playCount: Int = 0,
-    val lastPlayedTimestamp: Long = 0L
+    val lastPlayedTimestamp: Long = 0L,
+    val tags: String = ""
 )
